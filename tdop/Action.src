@@ -1,0 +1,52 @@
+/*
+ * Action.src
+ *
+ *  Created on: Jun 12, 2010
+ *      Author: Peter Goodman
+ *     Version: $Id$
+ */
+
+/// create an action that takes in two variables
+size_t action(EnvT (*action_func)(EnvT, EnvT), VarT v0, VarT v1) {
+    return addAction(
+        new VariadicFunction<EnvT,EnvT,EnvT>(action_func),
+        2, v0.id, v1.id
+    );
+}
+
+/// create an action that takes in two variables
+size_t action(EnvT (*action_func)(TokT, EnvT), TokenT v0, VarT v1) {
+    return addAction(
+        new VariadicFunction<TokT,EnvT,EnvT>(action_func),
+        2, v0.id, v1.id
+    );
+}
+
+size_t action(EnvT (*action_func)(EnvT, TokT), VarT v0, TokenT v1) {
+    return addAction(
+        new VariadicFunction<EnvT,TokT,EnvT>(action_func),
+        2, v0.id, v1.id
+    );
+}
+
+size_t action(EnvT (*action_func)(TokT, TokT), TokenT v0, TokenT v1) {
+    return addAction(
+        new VariadicFunction<TokT,TokT,EnvT>(action_func),
+        2, v0.id, v1.id
+    );
+}
+
+/// create an action that takes in one variable
+size_t action(EnvT (*action_func)(EnvT), VarT v0) {
+    return addAction(
+        new VariadicFunction<EnvT,EnvT>(action_func),
+        1, v0.id
+    );
+}
+
+size_t action(EnvT (*action_func)(TokT), TokenT v0) {
+    return addAction(
+        new VariadicFunction<TokT,EnvT>(action_func),
+        1, v0.id
+    );
+}
