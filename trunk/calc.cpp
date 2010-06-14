@@ -117,7 +117,7 @@ int main(void) {
       >>= g.action(pos_node, right_expr);
 
     // exponentiation, right associative
-    g --> left_expr(10) | POW | right_expr(9)
+    g --> left_expr(20) | POW | right_expr(19)
       >>= g.action(pow_node, left_expr, right_expr);
 
     // parentheses to change order of operations
