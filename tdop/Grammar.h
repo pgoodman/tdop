@@ -220,7 +220,8 @@ namespace tdop {
         };
     }
 
-    /// the token class is used to represent a specific token
+    /// the token class is used to represent a specific terminal as a variable
+    /// that captures a token
     template <typename EnvT, typename TermT, typename TokT>
     class Token {
 
@@ -744,7 +745,7 @@ namespace tdop {
                 params[denotation->symbols[0].variable_id] = EnvOrTokT(
                     env_or_error.getFirst()
                 );
-                env_or_error = denotation->eval(params, delegate, ++it, end, 2);
+                env_or_error = denotation->eval(params, delegate, it, end, 1);
                 delete delegate;
 
                 // an error occurred, propagate upward
