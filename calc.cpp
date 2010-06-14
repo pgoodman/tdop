@@ -20,7 +20,8 @@ typedef enum {
     POPEN = '(',
     PCLOSE = ')',
     MULT = '*',
-    DIV = '/'
+    DIV = '/',
+    MINUS = '-'
 } Terminal;
 
 class Token {
@@ -83,6 +84,7 @@ static void lex(std::vector<Token> &tokens, char *line) {
         case '^': tokens.push_back(Token(POW)); break;
         case '*': tokens.push_back(Token(MULT)); break;
         case '/': tokens.push_back(Token(DIV)); break;
+        case '-': tokens.push_back(Token(MINUS)); break;
         default:
             if('0' <= *line && '9' >= *line) {
                 tokens.push_back(Token(INTEGER, line));
@@ -135,13 +137,13 @@ int main(void) {
         std::cin.getline(line, 100);
         lex(str, line);
 
-        //std::cout << "result:\n" << g.parse(str) << "\n";
-        tdop::Variant<int, tdop::Error<int, Terminal, Token> > result(g.parse(str));
-        if(result.isFirst()) {
-            std::cout << "result=" << result.getFirst() << '\n';
+        tdop::ParseResult<int, Terminal, Token> result(g.parse(str));
+
+        if(!result.isError()) {
+            std::cout << "result=" << result.getResult() << '\n';
         } else {
             std::cout << "error!\n";
-            tdop::Error<int, Terminal, Token> err(result.getSecond());
+            tdop::Error<int, Terminal, Token> err(result.getError());
 
             for(size_t i(0); i < err.partial_envs.size(); ++i) {
                 std::cout << "partial result=" << err.partial_envs[i] << '\n';
@@ -157,6 +159,8 @@ int main(void) {
                 std::cout << "unexpect eoi\n";
             } else if(err.type == tdop::UNEXPECTED_TOKEN) {
                 std::cout << "unexpected token\n";
+            } else if(err.type == tdop::INCOMPLETE_PARSE) {
+                std::cout << "incomplete parse.\n";
             } else {
                 std::cout << "??\n";
             }
