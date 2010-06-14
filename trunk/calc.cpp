@@ -74,8 +74,6 @@ static Terminal tok_to_term(Token &tok) {
 }
 
 static void lex(std::vector<Token> &tokens, char *line) {
-    tokens.clear();
-
     for(; *line != '\0'; ++line) {
         switch(*line) {
         case '(': tokens.push_back(Token(POPEN)); break;
@@ -135,6 +133,9 @@ int main(void) {
         std::cout << ">>> ";
         std::cin.unsetf(std::ios_base::skipws);
         std::cin.getline(line, 100);
+
+        str.clear();
+        str.resize(0);
         lex(str, line);
 
         tdop::ParseResult<int, Terminal, Token> result(g.parse(str));
