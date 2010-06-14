@@ -40,13 +40,17 @@ namespace tdop {
     template <typename EnvT, typename TermT, typename TokT=TermT>
     class Error;
 
+    template <typename EnvT, typename TermT, typename TokT=TermT>
+    class ParseResult;
+
     typedef enum {
         NO_ERROR,
         NO_TOKENS_TO_PARSE,
         MISSING_NULL_DENOTATION,
         MISSING_LEFT_DENOTATION,
         UNEXPECTED_END_OF_INPUT,
-        UNEXPECTED_TOKEN
+        UNEXPECTED_TOKEN,
+        INCOMPLETE_PARSE
     } ErrorType;
 
     namespace {
@@ -368,7 +372,7 @@ namespace tdop {
 
                 term = (grammar.tok_to_term)(*it);
 
-                // std::cout << "looking at term=" << ((char) term) << ", tok=" << (it->lexeme) << '\n';
+                std::cout << "looking at term=" << ((char) term) << ", tok=" << (it->lexeme) << '\n';
 
                 // we need to match a terminal, and possibly pass the token
                 // in to the action function
@@ -414,7 +418,7 @@ namespace tdop {
 
                     // an error occurred while parsing, propagate it upward
                     } else {
-                        // std::cout << "* params.size()=" << params.size() << "\n";
+                        std::cout << "* params.size()=" << params.size() << "\n";
                         return env_or_error;
                     }
                 } else {
@@ -662,7 +666,7 @@ namespace tdop {
                 if(!env_or_tok.isFirst()) {
                     continue;
                 }
-                // std::cout << "**partial result=" << env_or_tok.getFirst() << "\n";
+                std::cout << "**partial result=" << env_or_tok.getFirst() << "\n";
                 err.partial_envs.push_back(env_or_tok.getFirst());
             }
 
@@ -682,13 +686,13 @@ namespace tdop {
                 return ErrorT(MISSING_NULL_DENOTATION, *it);
             }
 
-            // std::cout << "push parseImpl(" << rbp << "), start is " << ((char) terminal) << '\n';
+            std::cout << "push parseImpl(" << rbp << "), start is " << ((char) terminal) << '\n';
             std::vector<ParamT> params;
             params.resize(num_variables, Null());
 
             // evaluate the null denotation starting at the terminal pointed
             // to by the token iterator
-            // std::cout << "push nud(" << ((char) terminal) << " " << it->lexeme << ")\n";
+            std::cout << "push nud(" << ((char) terminal) << " " << it->lexeme << ")\n";
 
             DenotationT *denotation(null_denotations[terminal]);
 
@@ -707,7 +711,7 @@ namespace tdop {
                 return env_or_error;
             }
 
-            // std::cout << "pop nud(" << ((char) terminal) << ")\n";
+            std::cout << "pop nud(" << ((char) terminal) << ")\n";
 
             // be greedy and try to capture as much as possible in this
             // environment by looking for operators with leds that
@@ -715,9 +719,9 @@ namespace tdop {
             for(; it != end; ) {
 
                 terminal = tok_to_term(*it);
-                // std::cout << "rbp=" << rbp << "; lbp(" << ((char) terminal) << ")=" << leftBindingPower(terminal) << "\n";
+                std::cout << "rbp=" << rbp << "; lbp(" << ((char) terminal) << ")=" << leftBindingPower(terminal) << "\n";
                 if(rbp >= leftBindingPower(terminal)) {
-                    // std::cout << "** stopping\n";
+                    std::cout << "** stopping\n";
                     break;
                 }
 
@@ -734,7 +738,7 @@ namespace tdop {
 
                 denotation = left_denotations[terminal];
 
-                // std::cout << "push led(" << ((char) terminal) << " " << it->lexeme << ")\n";
+                std::cout << "push led(" << ((char) terminal) << " " << it->lexeme << ")\n";
 
                 // get the action function to call, copy it, pass it in, and
                 // then tell the evaluation function to skip the first symbol
@@ -754,12 +758,12 @@ namespace tdop {
                     return env_or_error;
                 }
 
-                // std::cout << "pop led(" << ((char) terminal) << ")\n";
+                std::cout << "pop led(" << ((char) terminal) << ")\n";
             }
 
             delegate = 0;
 
-            // std::cout << "pop parseImpl\n";
+            std::cout << "pop parseImpl\n";
 
             return env_or_error;
         }
@@ -767,7 +771,7 @@ namespace tdop {
     public:
 
         /// parse a string
-        Variant<EnvT, ErrorT> parse(std::vector<TokT> &str) {
+        ParseResult<EnvT,TermT,TokT> parse(std::vector<TokT> &str) {
 
             ErrorT error(NO_TOKENS_TO_PARSE);
             if(0 == str.size()) {
@@ -775,12 +779,21 @@ namespace tdop {
             }
 
             TokTIterator it(str.begin());
-            TokTIterator it_end(str.end());
+            TokTIterator end(str.end());
 
-            return parseImpl(it, it_end, TDOP_BP_BASE);
+            Variant<EnvT, ErrorT> ret(parseImpl(it, end, TDOP_BP_BASE));
+            if(ret.isFirst() && it != end) {
+                return ParseResult<EnvT,TermT,TokT>(
+                    ErrorT(INCOMPLETE_PARSE, ret.getFirst(), *it)
+                );
+            }
+
+            return ParseResult<EnvT,TermT,TokT>(ret);
         }
     };
 
+    /// contains all information relating to any errors that have
+    /// occured during a parse
     template <typename EnvT, typename TermT, typename TokT>
     class Error {
 
@@ -830,6 +843,33 @@ namespace tdop {
 
         Error(const SelfT &other) {
             operator=(other);
+        }
+    };
+
+    /// represents a nicer form for the result of a parse.
+    template <typename EnvT, typename TermT, typename TokT>
+    class ParseResult : protected Variant<EnvT, Error<EnvT,TermT,TokT> > {
+    public:
+
+        ParseResult(Variant<EnvT, Error<EnvT,TermT,TokT> > &v)
+         : Variant<EnvT, Error<EnvT,TermT,TokT> >(v) { }
+
+        ParseResult(EnvT e)
+         : Variant<EnvT, Error<EnvT,TermT,TokT> >(e) { }
+
+        ParseResult(Error<EnvT,TermT,TokT> e)
+         : Variant<EnvT, Error<EnvT,TermT,TokT> >(e) { }
+
+        bool isError(void) const {
+            return !this->isFirst();
+        }
+
+        Error<EnvT,TermT,TokT> &getError(void) {
+            return this->getSecond();
+        }
+
+        EnvT getResult(void) {
+            return this->getFirst();
         }
     };
 }
