@@ -41,6 +41,8 @@ namespace tdop {
 
     public:
 
+        virtual ~Function(void) { }
+
         virtual T0 apply(void) = 0;
 
         /// main curry method, add in an argument
@@ -80,6 +82,8 @@ namespace tdop {
         VariadicFunction(FuncT *func)
          : Function<T0>(0), func_ptr(func) { }
 
+        virtual ~VariadicFunction(void) { }
+
         virtual T0 apply(void) {
             this->num_seen_args = 0;
             return func_ptr();
@@ -111,6 +115,8 @@ namespace tdop {
 
         VariadicFunction(FuncT *func)
          : Function<T1>(1), func_ptr(func) { }
+
+        virtual ~VariadicFunction(void) { }
 
         virtual T1 apply(void) {
             assert(this->num_args == this->num_seen_args);
@@ -150,6 +156,8 @@ namespace tdop {
 
         VariadicFunction(FuncT *func)
          : Function<T2>(2), func_ptr(func) { }
+
+        virtual ~VariadicFunction(void) { }
 
         virtual T2 apply(void) {
             assert(this->num_args == this->num_seen_args);
@@ -192,6 +200,8 @@ namespace tdop {
 
         VariadicFunction(FuncT *func)
          : Function<T3>(3), func_ptr(func) { }
+
+        virtual ~VariadicFunction(void) { }
 
         virtual T3 apply(void) {
             assert(this->num_args == this->num_seen_args);
