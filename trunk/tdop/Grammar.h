@@ -347,7 +347,7 @@ namespace tdop {
         SelfT &operator=(const SelfT &) { return *this; }
 
         /// evaluate this denotation as a null denotation
-        Variant<EnvT,ErrorT> eval(
+        Variant<EnvT,ErrorT *> eval(
             std::vector<Variant<Null, EnvOrTokT> > &params,
             Function<EnvT> *delegate,
             TokTIterator &it,
@@ -367,7 +367,8 @@ namespace tdop {
                 const SymbolT &symbol(symbols[i]);
 
                 if(it == end) {
-                    return ErrorT(UNEXPECTED_END_OF_INPUT);
+                    grammar.error.assign(UNEXPECTED_END_OF_INPUT);
+                    return &(grammar.error);
                 }
 
                 term = (grammar.tok_to_term)(*it);
@@ -380,11 +381,12 @@ namespace tdop {
                 || SymbolT::TermVariable == symbol.state) {
 
                     if(term != symbol.terminal) {
-                        return ErrorT(
+                        grammar.error.assign(
                             UNEXPECTED_TOKEN,
                             *it,
                             symbol.terminal
                         );
+                        return &(grammar.error);
                     }
 
                     // add in the parameter
@@ -406,7 +408,7 @@ namespace tdop {
                     );
 
                     // get the result of parsing
-                    Variant<EnvT,ErrorT> env_or_error(g.parseImpl(
+                    Variant<EnvT,ErrorT *> env_or_error(g.parseImpl(
                         it, end, symbol.binding_power
                     ));
 
@@ -555,6 +557,8 @@ namespace tdop {
 
         TokToTermFuncT *tok_to_term;
 
+        Error<EnvT,TermT,TokT> error;
+
         /// get the next variable id used by this grammar
         unsigned getNextVariableId(void) {
             return num_variables++;
@@ -651,7 +655,10 @@ namespace tdop {
     private:
 
         /// pull out all of the partial environments for error handling
-        void addPartialEnvsToError(ErrorT &err, std::vector<ParamT> &params) {
+        void addPartialEnvsToError(ErrorT *err, std::vector<ParamT> &params) {
+
+            // copy error information between grammars
+            error = *err;
 
             typename std::vector<ParamT>::iterator it(params.begin());
             typename std::vector<ParamT>::iterator end(params.end());
@@ -667,14 +674,14 @@ namespace tdop {
                     continue;
                 }
                 std::cout << "**partial result=" << env_or_tok.getFirst() << "\n";
-                err.partial_envs.push_back(env_or_tok.getFirst());
+                error.partial_envs.push_back(env_or_tok.getFirst());
             }
 
             params.clear();
         }
 
         /// parse a sequence of tokens
-        Variant<EnvT, ErrorT> parseImpl(
+        Variant<EnvT, ErrorT *> parseImpl(
             TokTIterator &it,
             TokTIterator &end,
             unsigned int rbp
@@ -683,7 +690,8 @@ namespace tdop {
             TermT terminal(tok_to_term(*it));
 
             if(!hasDenotation(terminal, null_denotations)) {
-                return ErrorT(MISSING_NULL_DENOTATION, *it);
+                error.assign(MISSING_NULL_DENOTATION, *it);
+                return &(error);
             }
 
             std::cout << "push parseImpl(" << rbp << "), start is " << ((char) terminal) << '\n';
@@ -700,7 +708,7 @@ namespace tdop {
 
             // create a copy of the action function to call
             Function<EnvT> *delegate(nud_action.delegate->copy());
-            Variant<EnvT, ErrorT> env_or_error(
+            Variant<EnvT, ErrorT *> env_or_error(
                 denotation->eval(params, delegate, it, end)
             );
             delete delegate;
@@ -727,13 +735,13 @@ namespace tdop {
 
 
                 if(!hasDenotation(terminal, left_denotations)) {
-                    ErrorT err(ErrorT(
+                    error.assign(
                         MISSING_LEFT_DENOTATION,
                         env_or_error.getFirst(),
                         *it
-                    ));
-                    addPartialEnvsToError(err, params);
-                    return err;
+                    );
+                    addPartialEnvsToError(env_or_error.getSecond(), params);
+                    return &error;
                 }
 
                 denotation = left_denotations[terminal];
@@ -773,22 +781,25 @@ namespace tdop {
         /// parse a string
         ParseResult<EnvT,TermT,TokT> parse(std::vector<TokT> &str) {
 
-            ErrorT error(NO_TOKENS_TO_PARSE);
             if(0 == str.size()) {
-                return error;
+                error.assign(NO_TOKENS_TO_PARSE);
+                return ParseResult<EnvT,TermT,TokT>(error);
             }
 
             TokTIterator it(str.begin());
             TokTIterator end(str.end());
 
-            Variant<EnvT, ErrorT> ret(parseImpl(it, end, TDOP_BP_BASE));
+            Variant<EnvT, ErrorT *> ret(parseImpl(it, end, TDOP_BP_BASE));
             if(ret.isFirst() && it != end) {
-                return ParseResult<EnvT,TermT,TokT>(
-                    ErrorT(INCOMPLETE_PARSE, ret.getFirst(), *it)
-                );
+                error.assign(INCOMPLETE_PARSE, ret.getFirst(), *it);
             }
 
-            return ParseResult<EnvT,TermT,TokT>(ret);
+            // successful parse
+            if(ret.isFirst()) {
+                return ParseResult<EnvT,TermT,TokT>(error, ret.getFirst());
+            }
+
+            return ParseResult<EnvT,TermT,TokT>(error);
         }
     };
 
@@ -809,26 +820,33 @@ namespace tdop {
         Error(void)
          : type(NO_ERROR) { }
 
-        Error(const ErrorType t)
-         : type(t) { }
+        void assign(const ErrorType t) {
+            type = t;
+        }
 
-        Error(const ErrorType t, EnvT e, TokT et)
-         : error_tok(et)
-         , type(t) {
+        void assign(const ErrorType t, EnvT e, TokT et) {
+            error_tok = et;
+            type = t;
             partial_envs.push_back(e);
         }
 
-        Error(const ErrorType t, TokT et)
-         : error_tok(et)
-         , type(t) { }
+        void assign(const ErrorType t, TokT et) {
+            error_tok = et;
+            type = t;
+        }
 
-        Error(const ErrorType t, TokT et, TermT tt)
-         : error_tok(et)
-         , error_term(tt)
-         , type(t) { }
+        void assign(const ErrorType t, TokT et, TermT tt) {
+            error_tok = et;
+            error_term = tt;
+            type = t;
+        }
 
         // make sure to keep track of any parsed environments
         SelfT &operator=(const SelfT &other) {
+            if(this == &other) {
+                return *this;
+            }
+
             partial_envs.insert(
                 partial_envs.end(),
                 other.partial_envs.begin(),
@@ -848,28 +866,33 @@ namespace tdop {
 
     /// represents a nicer form for the result of a parse.
     template <typename EnvT, typename TermT, typename TokT>
-    class ParseResult : protected Variant<EnvT, Error<EnvT,TermT,TokT> > {
+    class ParseResult {
+    private:
+
+        EnvT result;
+        Error<EnvT,TermT,TokT> &error;
+        bool is_error;
+
     public:
 
-        ParseResult(Variant<EnvT, Error<EnvT,TermT,TokT> > &v)
-         : Variant<EnvT, Error<EnvT,TermT,TokT> >(v) { }
+        ParseResult(Error<EnvT,TermT,TokT> &er, EnvT e)
+         : result(e), error(er), is_error(false) { }
 
-        ParseResult(EnvT e)
-         : Variant<EnvT, Error<EnvT,TermT,TokT> >(e) { }
-
-        ParseResult(Error<EnvT,TermT,TokT> e)
-         : Variant<EnvT, Error<EnvT,TermT,TokT> >(e) { }
+        ParseResult(Error<EnvT,TermT,TokT> &er)
+         : error(er), is_error(true) { }
 
         bool isError(void) const {
-            return !this->isFirst();
+            return is_error;
         }
 
         Error<EnvT,TermT,TokT> &getError(void) {
-            return this->getSecond();
+            assert(is_error);
+            return error;
         }
 
         EnvT getResult(void) {
-            return this->getFirst();
+            assert(!is_error);
+            return result;
         }
     };
 }
